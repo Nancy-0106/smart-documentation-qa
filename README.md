@@ -1,232 +1,134 @@
-**# Smart Documentation Q\&A Agent**
+# Smart Documentation Q&A Agent
 
+## Project Overview
 
+The Smart Documentation Q&A Agent is a Python-based application that allows users to ask questions about documents stored in a designated folder. It extracts document content, retrieves relevant text, and uses Groq AI to generate answers grounded in the available content.
 
-**## 1. Project Overview**
+## Features
 
+- **Automatic Document Scanning:** Scans the `documents` folder and its subfolders for supported files.
+- **Document Text Extraction:** Extracts text from PDF, Word, Excel, PowerPoint, and text-based files.
+- **Image OCR:** Uses Tesseract OCR to extract text from images and scanned PDF pages.
+- **AI-Powered Question Answering:** Uses the Groq API to answer questions using retrieved document excerpts.
+- **Keyword-Based Retrieval:** Ranks text chunks according to their relevance to a user's question.
+- **Missing-Information Handling:** Instructs the AI to indicate when retrieved excerpts do not provide enough information.
+- **Streamlit Interface:** Provides a browser-based interface for scanning documents and asking questions.
 
+## Technologies Used
 
-**The Smart Documentation Q\&A Agent is a Python-based application that helps users find information from documents by entering questions. It extracts text from supported document formats and provides relevant sections from the selected document. It also includes an AI-powered answer mode using CrewAI and Google's Gemini API.**
+- Python
+- Streamlit
+- Groq API
+- Tesseract OCR
+- PyMuPDF
+- python-docx
+- openpyxl
+- python-pptx
+- Pillow
+- pytesseract
+- python-dotenv
 
+## Project Workflow
 
+1. The user places supported documents inside the `documents` folder.
+2. The application scans the folder and its subfolders.
+3. The document reader extracts text from supported files and uses OCR where required.
+4. The retrieval component selects text chunks relevant to the user's question.
+5. The selected excerpts are sent to Groq AI.
+6. The application displays the generated answer in the Streamlit interface.
 
-**## 2. Objectives**
+## Supported File Formats
 
+- PDF
+- DOCX
+- XLSX
+- PPTX
+- TXT and supported text-based formats
+- PNG, JPG, JPEG, BMP, TIFF, and WEBP images
 
+## Prerequisites
 
-**- Extract text from PDF documents.**
+- Python 3.12 or a compatible supported Python version
+- A Groq API key
+- Tesseract OCR installed on Windows or the relevant operating system
 
-**- Read DOCX, XLSX, and supported image files.**
+## Installation and Setup
 
-**- Use OCR to extract text from scanned images.**
+### 1. Clone the repository
 
-**- Find relevant document sections using keyword-based local search.**
+```bash
+git clone https://github.com/Nancy-0106/smart-documentation-qa.git
+cd smart-documentation-qa
+```
 
-**- Provide an optional AI-powered question-answering feature.**
+### 2. Create a virtual environment
 
-**- Display extracted document content through a simple web interface.**
+```bash
+python -m venv .venv
+```
 
+### 3. Install dependencies
 
+On Windows PowerShell:
 
-**## 3. Technologies Used**
+```powershell
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+```
 
+### 4. Configure the Groq API key
 
+Create a `.env` file in the project root:
 
-**- Python**
+```text
+GROQ_API_KEY=your_groq_api_key_here
+```
 
-**- Streamlit**
+Replace the placeholder with your own API key. Never commit `.env` or publish your API key.
 
-**- CrewAI**
+### 5. Install and configure Tesseract OCR
 
-**- Google Gemini API**
+Install Tesseract OCR and ensure its executable path matches the configuration in `document_reader.py`.
 
-**- PyMuPDF**
+The default Windows path used by this project is:
 
-**- Tesseract OCR**
+```text
+C:\Program Files\Tesseract-OCR\tesseract.exe
+```
 
-**- Pytesseract**
+### 6. Add documents
 
-**- Pillow**
+Place the documents you want to analyze inside the `documents` folder. Create the folder if it does not already exist.
 
-**- Python-docx**
+### 7. Run the application
 
-**- Openpyxl**
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app.py
+```
 
-**- Python-dotenv**
+Open the local URL displayed in the terminal, usually `http://localhost:8501`.
 
+## Security Considerations
 
+- Keep API keys and credentials out of source code and version control.
+- Do not publish confidential, personal, or financial documents.
+- Review document content before sending it to an external AI API.
+- AI-generated answers may be incomplete or inaccurate and should be verified against the original documents.
 
-**## 4. Features**
+## Current Limitations
 
+- Retrieval uses keyword-based matching rather than semantic embeddings.
+- OCR accuracy depends on image quality, text size, and image clarity.
+- The application runs locally unless separately deployed to a hosting platform.
+- The AI can only answer reliably when relevant information is extracted and included in the retrieved excerpts.
 
+## Future Enhancements
 
-**- Simple and interactive web interface.**
+- Semantic search using text embeddings.
+- Source filename and page-level citations.
+- Improved OCR preprocessing.
+- User authentication and access controls.
+- Deployment to a suitable hosting platform.
 
-**- Document selection from the documents folder.**
+## Repository
 
-**- Local document search that works without API access.**
-
-**- Optional AI-generated answers through Gemini and CrewAI.**
-
-**- PDF text extraction.**
-
-**- OCR support for scanned images and supported document pages.**
-
-**- Text preview for extracted document content.**
-
-
-
-**## 5. Project Structure**
-
-
-
-**```text**
-
-**smart-documentation-qa/**
-
-**├── app.py**
-
-**├── agent.py**
-
-**├── document\_reader.py**
-
-**├── test\_gemini.py**
-
-**├── requirements.txt**
-
-**├── .env**
-
-**├── .gitignore**
-
-**└── documents/**
-
-&#x20;   **└── Your documents**
-
-**```**
-
-
-
-**\*\*Note:\*\* The `.env` file contains the API key and must not be uploaded to GitHub.**
-
-
-
-**## 6. Installation**
-
-
-
-**1. Install Python 3.12 or a compatible version.**
-
-**2. Install Tesseract OCR separately for OCR functionality.**
-
-**3. Open a terminal in the project directory.**
-
-**4. Create and activate a Python virtual environment.**
-
-**5. Install the required packages:**
-
-
-
-**```bash**
-
-**pip install -r requirements.txt**
-
-**```**
-
-
-
-**6. Create a `.env` file and add your Gemini API key:**
-
-
-
-**```text**
-
-**GEMINI\_API\_KEY=your\_api\_key\_here**
-
-**```**
-
-
-
-**Replace the placeholder with your own API key. Do not share it publicly.**
-
-
-
-**## 7. Running the Application**
-
-
-
-**Start the application using:**
-
-
-
-**```bash**
-
-**streamlit run app.py**
-
-**```**
-
-
-
-**Open the local URL displayed in the terminal, usually `http://localhost:8501`.**
-
-
-
-**Select a document, enter a question, and choose Local Search or AI Answer mode.**
-
-
-
-**## 8. Working Methodology**
-
-
-
-**1. The application reads documents from the documents folder.**
-
-**2. The document reader extracts available text and uses OCR where configured.**
-
-**3. The user selects a document and enters a question.**
-
-**4. Local Search identifies relevant text sections based on keyword matching.**
-
-**5. AI Answer mode sends the document context and question to the configured Gemini model through CrewAI.**
-
-**6. The result is displayed in the Streamlit interface.**
-
-
-
-**## 9. Limitations**
-
-
-
-**- Local Search uses keyword matching and may miss relevant sections when different terminology is used.**
-
-**- AI Answer mode requires a working Gemini API configuration and available API quota.**
-
-**- OCR accuracy depends on image quality and document formatting.**
-
-**- Supported file formats depend on the document reader implementation.**
-
-
-
-**## 10. Future Enhancements**
-
-
-
-**- Semantic search and vector database integration.**
-
-**- Improved document chunking and retrieval.**
-
-**- Support for more file formats.**
-
-**- Conversation history and downloadable answers.**
-
-**- More robust citations showing the source page for each answer.**
-
-
-
-**## 11. Conclusion**
-
-
-
-**The Smart Documentation Q\&A Agent demonstrates how document extraction, OCR, keyword-based retrieval, and AI integration can be combined in a web application to make document information easier to find and understand.**
-
-
-
+[Smart Documentation Q&A Agent on GitHub](https://github.com/Nancy-0106/smart-documentation-qa)
