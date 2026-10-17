@@ -1,0 +1,9 @@
+
+streamlit
+crewai
+python-dotenv
+pymupdf
+python-docx
+openpyxl
+pillow
+pytesseract
