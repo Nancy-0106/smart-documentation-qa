@@ -1,5 +1,7 @@
 
 import os
+import shutil
+import tempfile
 from pathlib import Path
 from io import BytesIO
 
@@ -12,19 +14,30 @@ from openpyxl import load_workbook
 from pptx import Presentation
 
 
-# --------------------------------------------------
+# ==================================================
 # TESSERACT OCR CONFIGURATION
-# --------------------------------------------------
+# Supports Windows and Linux
+# ==================================================
 
-TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+WINDOWS_TESSERACT_PATH = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+)
 
-if os.path.exists(TESSERACT_PATH):
-    pytesseract.pytesseract.tesseract_cmd = TESSERACT_PATH
+SYSTEM_TESSERACT_PATH = shutil.which("tesseract")
+
+if os.path.exists(WINDOWS_TESSERACT_PATH):
+    pytesseract.pytesseract.tesseract_cmd = (
+        WINDOWS_TESSERACT_PATH
+    )
+elif SYSTEM_TESSERACT_PATH:
+    pytesseract.pytesseract.tesseract_cmd = (
+        SYSTEM_TESSERACT_PATH
+    )
 
 
-# --------------------------------------------------
+# ==================================================
 # SUPPORTED FILE TYPES
-# --------------------------------------------------
+# ==================================================
 
 TEXT_EXTENSIONS = {
     ".txt", ".md", ".py", ".sql", ".log", ".json",
@@ -46,17 +59,15 @@ SUPPORTED_EXTENSIONS = (
 MAX_FILE_SIZE = 30 * 1024 * 1024
 
 
-# --------------------------------------------------
+# ==================================================
 # IMAGE OCR
-# --------------------------------------------------
+# ==================================================
 
 def extract_image_text(image):
     """Extract text from a PIL image using Tesseract OCR."""
     try:
         image = ImageOps.exif_transpose(image)
         image = image.convert("RGB")
-
-        # Improve contrast before OCR.
         image = ImageEnhance.Contrast(image).enhance(1.5)
 
         text = pytesseract.image_to_string(
@@ -69,7 +80,8 @@ def extract_image_text(image):
     except pytesseract.TesseractNotFoundError:
         return (
             "OCR ERROR: Tesseract executable was not found. "
-            "Check TESSERACT_PATH in document_reader.py."
+            "Install Tesseract and ensure it is available "
+            "on the system PATH."
         )
 
     except Exception as error:
@@ -86,12 +98,13 @@ def extract_image_file(path):
         return f"IMAGE ERROR: {type(error).__name__}: {error}"
 
 
-# --------------------------------------------------
+# ==================================================
 # PDF READER
-# --------------------------------------------------
+# Extract embedded text and OCR scanned pages
+# ==================================================
 
 def read_pdf(path):
-    """Extract embedded text from PDFs and OCR scanned pages."""
+    """Extract text from PDFs, including scanned pages."""
     extracted = []
 
     with fitz.open(path) as pdf:
@@ -102,41 +115,41 @@ def read_pdf(path):
                 extracted.append(
                     f"[Source page: {page_number}]\n{page_text}"
                 )
-            else:
-                # Render scanned pages as images for OCR.
-                try:
-                    pixmap = page.get_pixmap(
-                        matrix=fitz.Matrix(2, 2),
-                        alpha=False
-                    )
+                continue
 
-                    image = Image.open(
-                        BytesIO(pixmap.tobytes("png"))
-                    )
+            try:
+                pixmap = page.get_pixmap(
+                    matrix=fitz.Matrix(2, 2),
+                    alpha=False
+                )
 
-                    ocr_text = extract_image_text(image)
+                image = Image.open(
+                    BytesIO(pixmap.tobytes("png"))
+                )
 
-                    if ocr_text:
-                        extracted.append(
-                            f"[Source page: {page_number} - OCR]\n"
-                            f"{ocr_text}"
-                        )
+                ocr_text = extract_image_text(image)
 
-                except Exception as error:
+                if ocr_text:
                     extracted.append(
-                        f"[Source page: {page_number}]\n"
-                        f"Page extraction error: {type(error).__name__}"
+                        f"[Source page: {page_number} - OCR]\n"
+                        f"{ocr_text}"
                     )
+
+            except Exception as error:
+                extracted.append(
+                    f"[Source page: {page_number}]\n"
+                    f"Page extraction error: {type(error).__name__}"
+                )
 
     return "\n\n".join(extracted).strip()
 
 
-# --------------------------------------------------
+# ==================================================
 # WORD READER
-# --------------------------------------------------
+# ==================================================
 
 def read_docx(path):
-    """Extract paragraphs and tables from a Word document."""
+    """Extract paragraphs and tables from Word documents."""
     document = Document(path)
     parts = []
 
@@ -146,7 +159,9 @@ def read_docx(path):
         if text:
             parts.append(text)
 
-    for table_number, table in enumerate(document.tables, start=1):
+    for table_number, table in enumerate(
+        document.tables, start=1
+    ):
         parts.append(f"[Table {table_number}]")
 
         for row in table.rows:
@@ -154,15 +169,14 @@ def read_docx(path):
                 cell.text.replace("\n", " ").strip()
                 for cell in row.cells
             ]
-
             parts.append(" | ".join(values))
 
     return "\n".join(parts).strip()
 
 
-# --------------------------------------------------
+# ==================================================
 # EXCEL READER
-# --------------------------------------------------
+# ==================================================
 
 def read_xlsx(path):
     """Extract cell values from Excel worksheets."""
@@ -193,18 +207,17 @@ def read_xlsx(path):
     return "\n".join(parts).strip()
 
 
-# --------------------------------------------------
+# ==================================================
 # POWERPOINT READER
-# --------------------------------------------------
+# ==================================================
 
 def read_pptx(path):
-    """Extract text from PowerPoint slides."""
+    """Extract text from PowerPoint slides and tables."""
     presentation = Presentation(path)
     parts = []
 
     for slide_number, slide in enumerate(
-        presentation.slides,
-        start=1
+        presentation.slides, start=1
     ):
         parts.append(f"[Slide {slide_number}]")
 
@@ -221,15 +234,14 @@ def read_pptx(path):
                         cell.text.strip()
                         for cell in row.cells
                     ]
-
                     parts.append(" | ".join(values))
 
     return "\n".join(parts).strip()
 
 
-# --------------------------------------------------
+# ==================================================
 # GENERAL DOCUMENT READER
-# --------------------------------------------------
+# ==================================================
 
 def read_document(path):
     """Read a supported document based on its extension."""
@@ -241,35 +253,32 @@ def read_document(path):
             return ""
 
         if path.stat().st_size > MAX_FILE_SIZE:
-            return (
-                "ERROR: File exceeds the 30 MB size limit."
-            )
+            return "ERROR: File exceeds the 30 MB size limit."
 
         if extension == ".pdf":
-            return read_pdf(str(path))
+            return read_pdf(path)
 
         if extension == ".docx":
-            return read_docx(str(path))
+            return read_docx(path)
 
         if extension == ".xlsx":
-            return read_xlsx(str(path))
+            return read_xlsx(path)
 
         if extension == ".pptx":
-            return read_pptx(str(path))
+            return read_pptx(path)
 
         if extension in TEXT_EXTENSIONS:
             try:
                 return path.read_text(
                     encoding="utf-8"
                 ).strip()
-
             except UnicodeDecodeError:
                 return path.read_text(
                     encoding="latin-1"
                 ).strip()
 
         if extension in IMAGE_EXTENSIONS:
-            return extract_image_file(str(path))
+            return extract_image_file(path)
 
         return ""
 
@@ -280,12 +289,12 @@ def read_document(path):
         )
 
 
-# --------------------------------------------------
-# READ A FILE UPLOADED TO STREAMLIT
-# --------------------------------------------------
+# ==================================================
+# READ A FILE UPLOADED THROUGH STREAMLIT
+# ==================================================
 
 def read_uploaded_file(uploaded_file):
-    """Read an uploaded Streamlit file object."""
+    """Read a file object supplied by Streamlit."""
     filename = getattr(
         uploaded_file,
         "name",
@@ -310,15 +319,23 @@ def read_uploaded_file(uploaded_file):
         if extension == ".pdf":
             extracted = []
 
-            with fitz.open(stream=file_bytes, filetype="pdf") as pdf:
-                for page_number, page in enumerate(pdf, start=1):
+            with fitz.open(
+                stream=file_bytes,
+                filetype="pdf"
+            ) as pdf:
+                for page_number, page in enumerate(
+                    pdf, start=1
+                ):
                     page_text = page.get_text("text").strip()
 
                     if page_text:
                         extracted.append(
-                            f"[Source page: {page_number}]\n{page_text}"
+                            f"[Source page: {page_number}]\n"
+                            f"{page_text}"
                         )
-                    else:
+                        continue
+
+                    try:
                         pixmap = page.get_pixmap(
                             matrix=fitz.Matrix(2, 2),
                             alpha=False
@@ -332,15 +349,20 @@ def read_uploaded_file(uploaded_file):
 
                         if text:
                             extracted.append(
-                                f"[Source page: {page_number} - OCR]\n{text}"
+                                f"[Source page: {page_number} - OCR]\n"
+                                f"{text}"
                             )
+
+                    except Exception as error:
+                        extracted.append(
+                            f"[Source page: {page_number}]\n"
+                            f"Page extraction error: "
+                            f"{type(error).__name__}"
+                        )
 
             return "\n\n".join(extracted).strip()
 
-        # For other formats, save a temporary copy so
-        # the same readers can process the file.
-        import tempfile
-
+        # Use the existing document readers for Office and text files.
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_path = Path(temp_dir) / Path(filename).name
             temp_path.write_bytes(file_bytes)
@@ -354,16 +376,18 @@ def read_uploaded_file(uploaded_file):
         )
 
 
-# --------------------------------------------------
+# ==================================================
 # COMBINE EXTRACTED DOCUMENT CONTENT
-# --------------------------------------------------
+# ==================================================
 
 def combine_document_text(documents):
-    """Combine extracted text from a list of document results."""
+    """Combine extracted text from document results."""
     parts = []
 
     for document in documents:
-        filename = document.get("filename", "Unknown document")
+        filename = document.get(
+            "filename", "Unknown document"
+        )
         text = document.get("text", "")
 
         if text and text.strip():
@@ -374,16 +398,16 @@ def combine_document_text(documents):
     return "\n\n".join(parts)
 
 
-# --------------------------------------------------
-# SCAN THE DOCUMENTS FOLDER RECURSIVELY
-# --------------------------------------------------
+# ==================================================
+# SCAN A FOLDER AND ITS SUBFOLDERS
+# ==================================================
 
 def read_folder_documents(folder_path):
     """
-    Scan a folder and its subfolders for supported documents.
+    Scan a folder recursively for supported documents.
 
-    Returns a list of dictionaries containing filename,
-    text, and status.
+    Returns a list of dictionaries containing:
+    filename, text, and status.
     """
     folder = Path(folder_path)
     results = []
@@ -418,22 +442,39 @@ def read_folder_documents(folder_path):
 
         relative_name = str(path.relative_to(folder))
 
-        if path.stat().st_size > MAX_FILE_SIZE:
+        try:
+            if path.stat().st_size > MAX_FILE_SIZE:
+                results.append({
+                    "filename": relative_name,
+                    "text": "",
+                    "status": "Skipped: file exceeds 30 MB."
+                })
+                continue
+
+            text = read_document(path)
+
+        except Exception as error:
             results.append({
                 "filename": relative_name,
                 "text": "",
-                "status": "Skipped: file exceeds 30 MB."
+                "status": (
+                    f"ERROR: {type(error).__name__}: {error}"
+                )
             })
             continue
 
-        text = read_document(path)
-
-        if text.startswith("ERROR:") or text.startswith("OCR ERROR:"):
+        if (
+            text.startswith("ERROR:")
+            or text.startswith("OCR ERROR:")
+            or text.startswith("IMAGE ERROR:")
+        ):
             status = text
             extracted_text = ""
+
         elif text.strip():
             status = "Read successfully"
             extracted_text = text
+
         else:
             status = "No text extracted"
             extracted_text = ""
