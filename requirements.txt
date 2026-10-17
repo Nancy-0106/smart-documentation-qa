@@ -1,9 +1,10 @@
 
 streamlit
-crewai
+groq
 python-dotenv
 pymupdf
 python-docx
 openpyxl
+python-pptx
 pillow
 pytesseract

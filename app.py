@@ -1,66 +1,13 @@
 
-import re
+from pathlib import Path
+
 import streamlit as st
-from document_reader import read_all_documents
+
 from agent import answer_question
+from document_reader import read_folder_documents, combine_document_text
 
-
-def local_search(document_text, question, top_k=3):
-    """Find relevant document sections without using an API."""
-
-    stop_words = {
-        "what", "is", "are", "the", "a", "an", "in", "on", "of",
-        "to", "for", "and", "or", "how", "does", "do", "explain",
-        "describe", "with", "from", "this", "that", "it", "be"
-    }
-
-    keywords = {
-        word.lower()
-        for word in re.findall(r"[a-zA-Z0-9]+", question)
-        if len(word) > 1 and word.lower() not in stop_words
-    }
-
-    if not keywords:
-        return "Please enter a more specific question."
-
-    chunks = re.split(r"(?=Page\s+\d+\s*:)", document_text, flags=re.I)
-
-    if len(chunks) <= 1:
-        chunks = [
-            document_text[i:i + 2000]
-            for i in range(0, len(document_text), 1700)
-        ]
-
-    scored_chunks = []
-
-    for index, chunk in enumerate(chunks):
-        words = {
-            word.lower()
-            for word in re.findall(r"[a-zA-Z0-9]+", chunk)
-        }
-        score = len(keywords.intersection(words))
-
-        if score > 0:
-            scored_chunks.append((score, index, chunk.strip()))
-
-    if not scored_chunks:
-        return (
-            "No matching section was found in the extracted document text. "
-            "Try using important keywords from your document."
-        )
-
-    scored_chunks.sort(key=lambda item: (-item[0], item[1]))
-
-    results = []
-    for score, index, chunk in scored_chunks[:top_k]:
-        results.append(
-            f"**Matching section {len(results) + 1}** "
-            f"(keyword matches: {score})\n\n"
-            f"{chunk[:1800]}"
-        )
-
-    return "\n\n---\n\n".join(results)
-
+PROJECT_DIR = Path(__file__).resolve().parent
+DOCUMENTS_DIR = PROJECT_DIR / "documents"
 
 st.set_page_config(
     page_title="Smart Documentation Q&A Agent",
@@ -70,75 +17,96 @@ st.set_page_config(
 
 st.title("📚 Smart Documentation Q&A Agent")
 st.write(
-    "Upload your supported documents into the documents folder, "
-    "then search their extracted content or ask the AI."
+    "Ask questions about documents stored in your documents folder. "
+    "The app uses Groq AI to generate answers from the extracted content."
 )
 
-with st.spinner("Reading documents..."):
-    documents = read_all_documents()
+DOCUMENTS_DIR.mkdir(parents=True, exist_ok=True)
 
-valid_documents = {
-    name: content
-    for name, content in documents.items()
-    if content and not content.startswith("Error:")
-}
 
-if not valid_documents:
-    st.error(
-        "No readable documents found. Add a PDF, DOCX, XLSX, "
-        "or supported image to the documents folder."
+def scan_documents():
+    """Read supported documents from the documents folder."""
+    with st.spinner("Scanning documents..."):
+        results = read_folder_documents(str(DOCUMENTS_DIR))
+
+    loaded = []
+    errors = []
+
+    for item in results:
+        text = item.get("text", "")
+        status = item.get("status", "")
+
+        if text and text.strip():
+            loaded.append({
+                "filename": item.get("filename", "Unknown file"),
+                "text": text
+            })
+        else:
+            errors.append({
+                "filename": item.get("filename", "Unknown file"),
+                "status": status or "No text extracted"
+            })
+
+    st.session_state["loaded_documents"] = loaded
+    st.session_state["document_errors"] = errors
+
+
+if "loaded_documents" not in st.session_state:
+    scan_documents()
+
+if st.button("🔄 Rescan documents folder"):
+    scan_documents()
+
+documents = st.session_state.get("loaded_documents", [])
+
+st.subheader("📂 Documents found")
+st.caption(f"Folder: {DOCUMENTS_DIR}")
+
+if documents:
+    st.success(f"Loaded {len(documents)} document(s).")
+
+    for document in documents:
+        st.write(f"📄 {document['filename']}")
+else:
+    st.warning(
+        "No readable documents found. Copy supported files into the "
+        "documents folder and click Rescan documents folder."
     )
-    st.stop()
 
-selected_document = st.selectbox(
-    "Choose a document",
-    list(valid_documents.keys())
-)
+errors = st.session_state.get("document_errors", [])
 
-mode = st.radio(
-    "Choose answer mode",
-    [
-        "Local Search (works without API)",
-        "AI Answer (Gemini + CrewAI)"
-    ],
-    index=0
-)
+if errors:
+    with st.expander("Files that could not be read"):
+        for item in errors:
+            st.write(f"**{item['filename']}** — {item['status']}")
+
+st.divider()
+st.subheader("💬 Ask your documents")
 
 question = st.text_area(
     "Enter your question",
-    placeholder="Example: What are control statements in R?"
+    placeholder="Example: Summarize the main concepts in my documents.",
+    height=100
 )
 
-if st.button("Get Answer", type="primary"):
-    if not question.strip():
+if st.button("🤖 Get Answer", type="primary"):
+    if not documents:
+        st.error("No readable documents are loaded. Please check the folder.")
+    elif not question.strip():
         st.warning("Please enter a question.")
     else:
-        document_text = valid_documents[selected_document]
+        combined_text = "\n\n".join(
+            f"DOCUMENT: {document['filename']}\n{document['text']}"
+            for document in documents
+        )
 
-        if mode == "Local Search (works without API)":
-            st.subheader("Relevant Document Sections")
-            st.info(
-                "Local search does not use Gemini or require API quota. "
-                "It finds relevant text; it does not generate an AI explanation."
-            )
-            st.markdown(local_search(document_text, question))
+        with st.spinner("Groq AI is analyzing your documents..."):
+            answer = answer_question(combined_text, question)
 
-        else:
-            try:
-                with st.spinner("Generating AI answer..."):
-                    answer = answer_question(document_text, question)
+        st.subheader("📝 Answer")
+        st.markdown(answer)
 
-                st.subheader("AI Answer")
-                st.write(answer)
-
-            except Exception as error:
-                st.warning(
-                    "The AI service is unavailable or its quota may be "
-                    "exhausted. Showing local document search results instead."
-                )
-                st.subheader("Relevant Document Sections")
-                st.markdown(local_search(document_text, question))
-                st.caption(f"AI error: {error}")
-
-with st.expander("View extracted document text"):
-    st.text(valid_documents[selected_document][:10000])
+st.caption(
+    "Tip: Add new files to the documents folder and click Rescan "
+    "documents folder before asking questions about them."
+)
